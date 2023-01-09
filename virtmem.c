@@ -9,10 +9,10 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include<stdbool.h>
 #define TLB_SIZE 16
 #define PAGES 1024
-#define PAGE_MASK 0
+#define PAGE_MASK 1023
 
 #define PAGE_SIZE 1024
 #define OFFSET_BITS 10
@@ -32,7 +32,7 @@ struct tlbentry {
 struct tlbentry tlb[TLB_SIZE];
 // number of inserts into TLB that have been completed. Use as tlbindex % TLB_SIZE for the index of the next TLB line to use.
 int tlbindex = 0;
-
+int option = 0;
 // pagetable[logical_page] is the physical page number for logical page. Value is -1 if that logical page isn't yet in the table.
 int pagetable[PAGES];
 
@@ -61,19 +61,33 @@ int search_tlb(unsigned char logical_page) {
 
 /* Adds the specified mapping to the TLB, replacing the oldest mapping (FIFO replacement). */
 void add_to_tlb(unsigned char logical, unsigned char physical) {
-    tlb[tlbindex].logical = logical;
-    tlb[tlbindex].physical = physical;
-    tlbindex = (tlbindex+1)%TLB_SIZE;
+    if(option == 0){
+        tlb[tlbindex].logical = logical;
+        tlb[tlbindex].physical = physical;
+        tlbindex = (tlbindex+1)%TLB_SIZE;
+    }
+    else{
+        
+    }
+  
     return;
 }
 
 int main(int argc, const char *argv[])
 {
-  if (argc != 3) {
-    fprintf(stderr, "Usage ./virtmem backingstore input\n");
+  if (argc !=3 && argc !=5) {
+    fprintf(stderr, "Usage ./virtmem backingstore input or ./virtmem backingstore input -p (0 or 1)\n");
     exit(1);
   }
-  
+    char flag[]= "-p";
+    if(argc > 4 && strcmp(argv[3],flag) == 0){
+        option = atoi(argv[4]);
+    }
+    else{
+        option = 0;
+        
+    }
+    
   const char *backing_filename = argv[1];
   int backing_fd = open(backing_filename, O_RDONLY);
   backing = mmap(0, MEMORY_SIZE, PROT_READ, MAP_PRIVATE, backing_fd, 0);
@@ -119,10 +133,12 @@ int main(int argc, const char *argv[])
       // Page fault
       if (physical_page == -1) {
           /* TODO */
+          
+          
           int page_address = logical_page * PAGE_SIZE;
           
           memcpy(main_memory + memory_index, backing + page_address,PAGE_SIZE);
-          physical_page= (memory_index + offset) >> 10;
+          physical_page= (memory_index + offset) >> 10 ;
           
           if( logical_page < PAGES){
               pagetable[logical_page] = physical_page;
@@ -131,14 +147,13 @@ int main(int argc, const char *argv[])
           if(memory_index < MEMORY_SIZE - PAGE_SIZE){
               memory_index+= PAGE_SIZE;
           }
-          
           page_faults++;
       }
             
       add_to_tlb(logical_page, physical_page);
     }
       
-    int physical_address = physical_address = (physical_page << OFFSET_BITS) | offset;
+    int physical_address = (physical_page << OFFSET_BITS) | offset;
     signed char value = main_memory[physical_address];
     
     printf("Virtual address: %d Physical address: %d Value: %d\n", logical_address, physical_address, value);
