@@ -11,7 +11,7 @@
 #include <string.h>
 #include<stdbool.h>
 #define TLB_SIZE 16
-#define PAGES 1024
+#define PAGES 256
 #define PAGE_MASK 1023
 
 #define PAGE_SIZE 1024
@@ -28,13 +28,20 @@ struct tlbentry {
   unsigned char physical;
 };
 
+struct pageentry{
+    unsigned int logical_page;
+    unsigned int physical_page;
+    unsigned int timestamp;
+};
+
 // TLB is kept track of as a circular array, with the oldest element being overwritten once the TLB is full.
 struct tlbentry tlb[TLB_SIZE];
 // number of inserts into TLB that have been completed. Use as tlbindex % TLB_SIZE for the index of the next TLB line to use.
 int tlbindex = 0;
 int option = 0;
+int pagefilled = 0;
 // pagetable[logical_page] is the physical page number for logical page. Value is -1 if that logical page isn't yet in the table.
-int pagetable[PAGES];
+struct pageentry pagetable[PAGES];
 
 signed char main_memory[MEMORY_SIZE];
 
@@ -47,6 +54,63 @@ int max(int a, int b)
     return a;
   return b;
 }
+
+void replace_page(unsigned int logical_page,unsigned int physical_page){
+    printf(" :::::   : %d", pagefilled);
+    if(option == 1){ //LRU
+        int pos = 0;
+        int max = pagetable[0].timestamp;
+        int i;
+        
+        for(i = 0;i < PAGE_SIZE; i++){
+            if(pagefilled< PAGE_SIZE){
+                // FIRST FILL THE TLB WITH FIRST 16 ENTRIES
+                pos = pagefilled;
+                pagefilled = (pagefilled+1) % PAGE_SIZE;
+                break;
+            }
+            if(pagetable[i].timestamp > max){
+                // AFTER FILLING THE ALL ENTRIES WE JUST COMPARE THE TIMESTAMPS OF ENTRIES AND WE RECORD THE POS OF LEAST USED
+                max = pagetable[i].timestamp;
+                pos=i;
+            }
+        }
+        
+        for(i=0;i < TLB_SIZE; i++){
+            if(i == pos){
+                // AFTER REPLACING THE LEAST USED TLB ENTRY WE SET THE TIMESTAMP TO ZERO
+                pagetable[pos].logical_page = logical_page;
+                pagetable[pos].physical_page = physical_page;
+                pagetable[pos].timestamp = 0;
+            }
+            else{
+                // INCREMENTING EVERY TIMESTAMP OF NOT USED TLB ENTRY
+                pagetable[i].timestamp++;
+            }
+        }
+    }
+    else{
+            
+            pagetable[pagefilled].physical_page = physical_page;
+            pagetable[pagefilled].logical_page = logical_page;
+            pagefilled = (pagefilled+1) % PAGE_SIZE;
+        
+    }
+
+}
+
+int get_from_pagetable(unsigned int logical_page){
+    
+    for(int i=0;i < PAGES; i++){
+        if(pagetable[i].logical_page == logical_page){
+            return pagetable[i].physical_page;
+        }
+    }
+    return -1;
+}
+
+
+
 
 /* Returns the physical address from TLB or -1 if not present. */
 int search_tlb(unsigned char logical_page) {
@@ -61,15 +125,9 @@ int search_tlb(unsigned char logical_page) {
 
 /* Adds the specified mapping to the TLB, replacing the oldest mapping (FIFO replacement). */
 void add_to_tlb(unsigned char logical, unsigned char physical) {
-    if(option == 0){
         tlb[tlbindex].logical = logical;
         tlb[tlbindex].physical = physical;
         tlbindex = (tlbindex+1)%TLB_SIZE;
-    }
-    else{
-        
-    }
-  
     return;
 }
 
@@ -98,7 +156,7 @@ int main(int argc, const char *argv[])
   // Fill page table entries with -1 for initially empty table.
   int i;
   for (i = 0; i < PAGES; i++) {
-    pagetable[i] = -1;
+    pagetable[i].physical_page = -1;
   }
   
   // Character buffer for reading lines of input file.
@@ -120,16 +178,16 @@ int main(int argc, const char *argv[])
     /* TODO
     / Calculate the page offset and logical page number from logical_address */
     int offset = logical_address & OFFSET_MASK;
-    int logical_page = logical_address >> OFFSET_BITS;
+    int logical_page = (logical_address >> OFFSET_BITS) ;
     int physical_page = search_tlb(logical_page);
     // TLB hit
     if (physical_page != -1) {
       tlb_hits++;
       // TLB miss
     } else {
-        //printf("%d ::   ",logical_page);
+
         
-        physical_page = pagetable[logical_page];
+        physical_page = get_from_pagetable(logical_page);
       // Page fault
       if (physical_page == -1) {
           /* TODO */
@@ -140,10 +198,9 @@ int main(int argc, const char *argv[])
           memcpy(main_memory + memory_index, backing + page_address,PAGE_SIZE);
           physical_page= (memory_index + offset) >> 10 ;
           
-          if( logical_page < PAGES){
-              pagetable[logical_page] = physical_page;
-          }
+          replace_page(logical_page,physical_page);
 
+          
           if(memory_index < MEMORY_SIZE - PAGE_SIZE){
               memory_index+= PAGE_SIZE;
           }
@@ -155,8 +212,7 @@ int main(int argc, const char *argv[])
       
     int physical_address = (physical_page << OFFSET_BITS) | offset;
     signed char value = main_memory[physical_address];
-    
-    printf("Virtual address: %d Physical address: %d Value: %d\n", logical_address, physical_address, value);
+    printf("Virtual address: %d Physical address: %d Value: %d\n",logical_address, physical_address, value);
   }
   
   printf("Number of Translated Addresses = %d\n", total_addresses);
