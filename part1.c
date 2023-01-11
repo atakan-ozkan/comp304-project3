@@ -12,7 +12,7 @@
 
 #define TLB_SIZE 16
 #define PAGES 1024
-#define PAGE_MASK 0
+#define PAGE_MASK 0x0FF
 
 #define PAGE_SIZE 1024
 #define OFFSET_BITS 10
