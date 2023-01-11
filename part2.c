@@ -29,8 +29,8 @@ struct tlbentry {
 };
 
 struct pageentry{
-    unsigned int logical_page;
-    unsigned int physical_page;
+    unsigned int page_number;
+    unsigned int frame_number;
     unsigned int timestamp;
 };
 
@@ -55,8 +55,7 @@ int max(int a, int b)
   return b;
 }
 
-void replace_page(unsigned int logical_page,unsigned int physical_page){
-    //printf(" :::::   : %d", pagefilled);
+void replace_page(unsigned int page_number,unsigned int frame_number){
         if(option == 1){ //LRU
             int pos = 0;
             int leastUsed = pagetable[0].timestamp;
@@ -77,19 +76,21 @@ void replace_page(unsigned int logical_page,unsigned int physical_page){
             
             for(i=0;i < PAGE_SIZE; i++){
                 if(i == pos){
-                    pagetable[pos].logical_page = logical_page;
-                    pagetable[pos].physical_page = physical_page;
+                    pagetable[pos].page_number = page_number;
+                    pagetable[pos].frame_number = frame_number;
                     pagetable[pos].timestamp = 0;
                 }
                 else{
-                    pagetable[i].timestamp++;
+                    if(pagetable[i].frame_number != -1){
+                        pagetable[i].timestamp++;
+                    }
                 }
             }
         }
         else{
-                
-                pagetable[pagefilled].physical_page = physical_page;
-                pagetable[pagefilled].logical_page = logical_page;
+                //FIFO
+                pagetable[pagefilled].page_number = page_number;
+                pagetable[pagefilled].frame_number = frame_number;
                 pagefilled = (pagefilled+1) % PAGE_SIZE;
             
         }
@@ -98,8 +99,8 @@ void replace_page(unsigned int logical_page,unsigned int physical_page){
 int get_from_pagetable(unsigned int logical_page){
     
     for(int i=0;i < PAGES; i++){
-        if(pagetable[i].logical_page == logical_page){
-            return pagetable[i].physical_page;
+        if(pagetable[i].page_number == logical_page){
+            return pagetable[i].frame_number;
         }
     }
     return -1;
@@ -152,8 +153,8 @@ int main(int argc, const char *argv[])
   // Fill page table entries with -1 for initially empty table.
   int i;
   for (i = 0; i < PAGES; i++) {
-    pagetable[i].physical_page = -1;
-    pagetable[i].logical_page = -1;
+    pagetable[i].page_number = -1;
+    pagetable[i].frame_number = -1;
   }
   
   // Character buffer for reading lines of input file.
@@ -188,13 +189,14 @@ int main(int argc, const char *argv[])
       // Page fault
       if (physical_page == -1) {
           /* TODO */
-          
+          char tempbuffer[BUFFER_SIZE];
           int pnum;
           int page_address = logical_page * PAGE_SIZE;
           if(PAGES == 1024 || ((pagefilled < (PAGES/4-1) && PAGES == 256))){
               
               memcpy(main_memory + memory_index, backing + page_address,PAGE_SIZE);
           }
+ 
           physical_page= (memory_index + offset) >> 10 ;
           
           replace_page(logical_page,physical_page);
